@@ -5,4 +5,4 @@ metadata:
   namespace: food-delivery
 data:
   APP_MODE: standalone
-  TICK_MS: "500"
+  TICK_MS: "2000"
