@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: simulation-config
+  namespace: food-delivery
+data:
+  APP_MODE: standalone
+  TICK_MS: "500"

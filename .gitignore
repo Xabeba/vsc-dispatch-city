@@ -1,0 +1,7 @@
+.DS_Store
+.idea/
+.vscode/
+*.log
+apps/dashboard/.nuxt/
+apps/dashboard/.output/
+apps/dashboard/node_modules/

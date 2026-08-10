@@ -1,0 +1,7 @@
+.git
+.gitignore
+apps/dashboard/node_modules
+apps/dashboard/.nuxt
+apps/dashboard/.output
+**/.DS_Store
+*.log

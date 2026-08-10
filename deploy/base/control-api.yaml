@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-api
+  namespace: food-delivery
+  labels:
+    app.kubernetes.io/name: control-api
+    app.kubernetes.io/part-of: food-delivery
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: control-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: control-api
+        app.kubernetes.io/part-of: food-delivery
+    spec:
+      containers:
+        - name: control-api
+          image: food-delivery-control-api:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: simulation-config
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 25m
+              memory: 24Mi
+            limits:
+              cpu: 250m
+              memory: 96Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: control-api
+  namespace: food-delivery
+  labels:
+    app.kubernetes.io/name: control-api
+spec:
+  selector:
+    app.kubernetes.io/name: control-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
