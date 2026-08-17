@@ -1,0 +1,14 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dashboard
+  namespace: food-delivery
+spec:
+  replicas: 2
+  template:
+    spec:
+      containers:
+        - name: dashboard
+          env:
+            - name: NUXT_PUBLIC_API_BASE
+              value: ""
