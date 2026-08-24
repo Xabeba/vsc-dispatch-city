@@ -14,15 +14,16 @@ import (
 
 // Server exposes the simulation over REST and Server-Sent Events.
 type Server struct {
-	engine *simulation.Engine
-	logger *slog.Logger
-	http   *http.Server
+	engine   *simulation.Engine
+	commands Commands
+	logger   *slog.Logger
+	http     *http.Server
 }
 
 // NewServer constructs an API server with all routes registered.
-func NewServer(addr string, engine *simulation.Engine, logger *slog.Logger) *Server {
+func NewServer(addr string, engine *simulation.Engine, commands Commands, logger *slog.Logger) *Server {
 	mux := http.NewServeMux()
-	server := &Server{engine: engine, logger: logger}
+	server := &Server{engine: engine, commands: commands, logger: logger}
 	mux.HandleFunc("GET /api/v1/snapshot", server.snapshot)
 	mux.HandleFunc("GET /api/v1/events", server.events)
 	mux.HandleFunc("POST /api/v1/simulation/start", server.start)
@@ -101,23 +102,37 @@ func (s *Server) events(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) start(w http.ResponseWriter, _ *http.Request) {
-	s.engine.SetRunning(true)
+func (s *Server) start(w http.ResponseWriter, r *http.Request) {
+	if err := s.commands.Start(r.Context()); err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]bool{"running": true})
 }
 
-func (s *Server) pause(w http.ResponseWriter, _ *http.Request) {
-	s.engine.SetRunning(false)
+func (s *Server) pause(w http.ResponseWriter, r *http.Request) {
+	if err := s.commands.Pause(r.Context()); err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]bool{"running": false})
 }
 
-func (s *Server) reset(w http.ResponseWriter, _ *http.Request) {
-	s.engine.Reset()
+func (s *Server) reset(w http.ResponseWriter, r *http.Request) {
+	if err := s.commands.Reset(r.Context()); err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) createOrder(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusCreated, s.engine.CreateOrder())
+func (s *Server) createOrder(w http.ResponseWriter, r *http.Request) {
+	order, err := s.commands.CreateOrder(r.Context())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadGateway)
+		return
+	}
+	writeJSON(w, http.StatusCreated, order)
 }
 
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {

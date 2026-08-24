@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: simulation-config
+  namespace: food-delivery
+data:
+  APP_MODE: distributed

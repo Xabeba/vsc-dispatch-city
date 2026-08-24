@@ -7,10 +7,15 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/teko/food-delivery/internal/api"
+	"github.com/teko/food-delivery/internal/events"
+	"github.com/teko/food-delivery/internal/messaging"
+	"github.com/teko/food-delivery/internal/model"
+	"github.com/teko/food-delivery/internal/scenario"
 	"github.com/teko/food-delivery/internal/simulation"
 )
 
@@ -23,7 +28,32 @@ func main() {
 	instance := env("POD_NAME", "local")
 	interval := time.Duration(envInt("TICK_MS", 500)) * time.Millisecond
 	engine := simulation.NewEngine(mode, instance)
-	server := api.NewServer(":"+env("PORT", "8080"), engine, logger)
+	commands := api.Commands(api.NewLocalCommands(engine))
+	var publisher *messaging.Publisher
+	if mode == "distributed" {
+		var err error
+		publisher, err = messaging.NewPublisher(ctx, env("RABBITMQ_URL", "amqp://delivery:delivery@localhost:5672/"), logger)
+		if err != nil {
+			logger.Error("create RabbitMQ publisher", "error", err)
+			return
+		}
+		defer func() {
+			if err := publisher.Close(); err != nil {
+				logger.Warn("close RabbitMQ publisher", "error", err)
+			}
+		}()
+		commands = &brokerCommands{publisher: publisher}
+		go func() {
+			config := messaging.ConsumerConfig{Queue: "live." + instance, Bindings: []string{"#"}, Workers: 1, Prefetch: 64, Exclusive: true, AutoDelete: true}
+			if err := messaging.Consume(ctx, env("RABBITMQ_URL", "amqp://delivery:delivery@localhost:5672/"), config, logger, func(_ context.Context, event model.EventEnvelope) error {
+				return engine.ApplyEvent(event)
+			}); err != nil && !errors.Is(err, context.Canceled) {
+				logger.Error("live event consumer stopped", "error", err)
+				cancel()
+			}
+		}()
+	}
+	server := api.NewServer(":"+env("PORT", "8080"), engine, commands, logger)
 
 	go func() {
 		if err := engine.Run(ctx, interval); err != nil && !errors.Is(err, context.Canceled) {
@@ -45,6 +75,42 @@ func main() {
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		logger.Error("graceful shutdown failed", "error", err)
 	}
+}
+
+type brokerCommands struct {
+	publisher *messaging.Publisher
+	sequence  atomic.Uint64
+}
+
+func (b *brokerCommands) Start(ctx context.Context) error {
+	return b.publishCommand(ctx, "simulation.started")
+}
+
+func (b *brokerCommands) Pause(ctx context.Context) error {
+	return b.publishCommand(ctx, "simulation.paused")
+}
+
+func (b *brokerCommands) Reset(ctx context.Context) error {
+	return b.publishCommand(ctx, "simulation.reset")
+}
+
+func (b *brokerCommands) CreateOrder(ctx context.Context) (model.Order, error) {
+	order, event, err := scenario.NewOrder(b.sequence.Add(1)+10_000, "control-api")
+	if err != nil {
+		return model.Order{}, err
+	}
+	if err := b.publisher.Publish(ctx, event); err != nil {
+		return model.Order{}, err
+	}
+	return order, nil
+}
+
+func (b *brokerCommands) publishCommand(ctx context.Context, eventType string) error {
+	event, err := events.New(eventType, "simulation", "", "control-api", map[string]string{"command": eventType})
+	if err != nil {
+		return err
+	}
+	return b.publisher.Publish(ctx, event)
 }
 
 func env(key, fallback string) string {
