@@ -40,4 +40,13 @@ flowchart LR
 
 Die Verarbeitung ist at-least-once. Der Order Worker besitzt in diesem Block nur einen lokalen Idempotenzspeicher. Ein Pod-Neustart zeigt deshalb bewusst die noch offene Persistenzlücke.
 
-RabbitMQ 4.3.5 laeuft im lokalen Kurscluster als einzelnes StatefulSet mit einem 1-GiB-PVC. Durable Queues und persistente Nachrichten koennen damit einen Container- oder Broker-Neustart ueberstehen. Der einzelne Broker bleibt trotzdem ein Single Point of Failure; echte Broker-HA mit Quorum Queues benoetigt mehrere RabbitMQ-Nodes und ist nicht Teil des Laptop-Labs.
+## Block 6: CloudNativePG und Persistenz
+
+Der Order Worker ist der einzige Schreiber des fachlichen Zustands. Er verarbeitet jedes Event mit einer PostgreSQL-Transaktion:
+
+1. `event_id` in `processed_events` beanspruchen.
+2. Fachliche Zustandsänderung projizieren.
+3. Relevantes Event in `order_events` ablegen.
+4. Transaktion committen und erst danach die RabbitMQ-Nachricht bestätigen.
+
+Die Anwendungen verwenden den von CloudNativePG verwalteten `food-delivery-db-rw`-Service. Dieser zeigt nach einem Failover automatisch auf den neuen Primary.

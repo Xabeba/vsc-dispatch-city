@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../block-05-messaging
+  - postgres.yaml
+  - migrate-job.yaml
+patches:
+  - path: database-patch.yaml
+  - path: rabbitmq-probe-patch.yaml
+labels:
+  - pairs:
+      course.teko.ch/block: "06"
+    includeSelectors: false

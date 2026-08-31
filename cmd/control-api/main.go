@@ -15,6 +15,7 @@ import (
 	"github.com/teko/food-delivery/internal/events"
 	"github.com/teko/food-delivery/internal/messaging"
 	"github.com/teko/food-delivery/internal/model"
+	"github.com/teko/food-delivery/internal/persistence"
 	"github.com/teko/food-delivery/internal/scenario"
 	"github.com/teko/food-delivery/internal/simulation"
 )
@@ -28,6 +29,23 @@ func main() {
 	instance := env("POD_NAME", "local")
 	interval := time.Duration(envInt("TICK_MS", 500)) * time.Millisecond
 	engine := simulation.NewEngine(mode, instance)
+	var repository *persistence.Repository
+	if databaseURL := env("DATABASE_URL", ""); databaseURL != "" {
+		var err error
+		repository, err = persistence.Connect(ctx, databaseURL)
+		if err != nil {
+			logger.Error("connect PostgreSQL", "error", err)
+			return
+		}
+		defer repository.Close()
+		engine.SetPersistent(true)
+		if snapshot, err := repository.LoadSnapshot(ctx); err != nil {
+			logger.Warn("initial database snapshot unavailable", "error", err)
+		} else {
+			engine.Hydrate(snapshot)
+		}
+		go refreshFromDatabase(ctx, repository, engine, logger)
+	}
 	commands := api.Commands(api.NewLocalCommands(engine))
 	var publisher *messaging.Publisher
 	if mode == "distributed" {
@@ -74,6 +92,24 @@ func main() {
 	defer shutdownCancel()
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		logger.Error("graceful shutdown failed", "error", err)
+	}
+}
+
+func refreshFromDatabase(ctx context.Context, repository *persistence.Repository, engine *simulation.Engine, logger *slog.Logger) {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			snapshot, err := repository.LoadSnapshot(ctx)
+			if err != nil {
+				logger.Warn("refresh database snapshot", "error", err)
+				continue
+			}
+			engine.Hydrate(snapshot)
+		}
 	}
 }
 

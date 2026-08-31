@@ -12,6 +12,7 @@ import (
 	"github.com/teko/food-delivery/internal/appenv"
 	"github.com/teko/food-delivery/internal/messaging"
 	"github.com/teko/food-delivery/internal/model"
+	"github.com/teko/food-delivery/internal/persistence"
 	"github.com/teko/food-delivery/internal/telemetry"
 	"github.com/teko/food-delivery/internal/workerutil"
 )
@@ -24,11 +25,39 @@ func main() {
 	metrics := &telemetry.Metrics{Service: "order-worker"}
 	metrics.Ready.Store(true)
 	go workerutil.RunTelemetry(ctx, cancel, metrics, logger)
+	var repository *persistence.Repository
+	if databaseURL := appenv.String("DATABASE_URL", ""); databaseURL != "" {
+		var err error
+		repository, err = persistence.Connect(ctx, databaseURL)
+		if err != nil {
+			logger.Error("connect PostgreSQL", "error", err)
+			return
+		}
+		defer repository.Close()
+		if err := repository.Migrate(ctx); err != nil {
+			logger.Error("migrate PostgreSQL", "error", err)
+			return
+		}
+	}
 
 	seen := make(map[string]struct{})
 	var seenMu sync.Mutex
 	config := messaging.ConsumerConfig{Queue: "order-projection", Bindings: []string{"order.#", "courier.#", "customer.#", "simulation.#"}, Workers: 2, Prefetch: 16}
-	err := messaging.Consume(ctx, url, config, logger, func(_ context.Context, event model.EventEnvelope) error {
+	err := messaging.Consume(ctx, url, config, logger, func(eventCtx context.Context, event model.EventEnvelope) error {
+		if repository != nil {
+			projected, err := repository.Project(eventCtx, event)
+			if err != nil {
+				metrics.Failures.Add(1)
+				return err
+			}
+			if !projected {
+				logger.Warn("duplicate event ignored by PostgreSQL", "event_id", event.ID)
+				return nil
+			}
+			metrics.Consumed.Add(1)
+			logger.Info("event projected to PostgreSQL", "event_id", event.ID, "event_type", event.Type, "order_id", event.CorrelationID)
+			return nil
+		}
 		seenMu.Lock()
 		_, duplicate := seen[event.ID]
 		if !duplicate {
