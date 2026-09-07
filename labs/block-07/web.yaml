@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: betrieb-lab
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lab-web
+  namespace: betrieb-lab
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: lab-web
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: lab-web
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.28.0-alpine
+          command: [sh, -c]
+          args: ["touch /tmp/ready; exec nginx -g 'daemon off;'"]
+          ports:
+            - name: http
+              containerPort: 80
+          readinessProbe:
+            exec:
+              command: [test, -f, /tmp/ready]
+            periodSeconds: 3
+            failureThreshold: 1
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: lab-web
+  namespace: betrieb-lab
+spec:
+  selector:
+    app: lab-web
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

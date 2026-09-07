@@ -1,0 +1,103 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-api
+  namespace: food-delivery
+spec:
+  template:
+    spec:
+      containers:
+        - name: control-api
+          env:
+            - name: CLUSTER_OBSERVER_URL
+              value: http://cluster-observer:8080
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: food-delivery-db
+  namespace: food-delivery
+spec:
+  monitoring:
+    enablePodMonitor: false
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq
+  namespace: food-delivery
+spec:
+  template:
+    spec:
+      containers:
+        - name: rabbitmq
+          ports:
+            - name: metrics
+              containerPort: 15692
+          volumeMounts:
+            - name: enabled-plugins
+              mountPath: /etc/rabbitmq/enabled_plugins
+              subPath: enabled_plugins
+      volumes:
+        - name: enabled-plugins
+          configMap:
+            name: rabbitmq-plugins
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  namespace: food-delivery
+  labels:
+    app.kubernetes.io/name: rabbitmq
+    app.kubernetes.io/part-of: food-delivery
+spec:
+  ports:
+    - name: metrics
+      port: 15692
+      targetPort: metrics
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: control-api
+  namespace: food-delivery
+  labels:
+    app.kubernetes.io/name: control-api
+    app.kubernetes.io/part-of: food-delivery
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: customer-simulator
+  namespace: food-delivery
+  labels:
+    app.kubernetes.io/name: customer-simulator
+    app.kubernetes.io/part-of: food-delivery
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: courier-simulator
+  namespace: food-delivery
+  labels:
+    app.kubernetes.io/name: courier-simulator
+    app.kubernetes.io/part-of: food-delivery
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-worker
+  namespace: food-delivery
+  labels:
+    app.kubernetes.io/name: order-worker
+    app.kubernetes.io/part-of: food-delivery
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: restaurant-worker
+  namespace: food-delivery
+  labels:
+    app.kubernetes.io/name: restaurant-worker
+    app.kubernetes.io/part-of: food-delivery

@@ -1,0 +1,55 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: food-delivery-services
+  namespace: food-delivery
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames: [food-delivery]
+  selector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values: [control-api, customer-simulator, courier-simulator, order-worker, restaurant-worker, cluster-observer]
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 10s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: rabbitmq
+  namespace: food-delivery
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames: [food-delivery]
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rabbitmq
+  endpoints:
+    - port: metrics
+      path: /metrics/per-object
+      interval: 10s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: food-delivery-postgres
+  namespace: food-delivery
+  labels:
+    release: monitoring
+spec:
+  namespaceSelector:
+    matchNames: [food-delivery]
+  selector:
+    matchLabels:
+      cnpg.io/cluster: food-delivery-db
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s

@@ -1,0 +1,107 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: cluster-observer
+  namespace: food-delivery
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: cluster-observer
+  namespace: food-delivery
+rules:
+  - apiGroups: [""]
+    resources: [pods, services]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets]
+    verbs: [get, list, watch]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses]
+    verbs: [get, list, watch]
+  - apiGroups: [postgresql.cnpg.io]
+    resources: [clusters]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: cluster-observer
+  namespace: food-delivery
+subjects:
+  - kind: ServiceAccount
+    name: cluster-observer
+    namespace: food-delivery
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: cluster-observer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cluster-observer
+  namespace: food-delivery
+  labels:
+    app.kubernetes.io/name: cluster-observer
+    app.kubernetes.io/part-of: food-delivery
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: cluster-observer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: cluster-observer
+        app.kubernetes.io/part-of: food-delivery
+    spec:
+      serviceAccountName: cluster-observer
+      automountServiceAccountToken: true
+      containers:
+        - name: cluster-observer
+          image: food-delivery-cluster-observer:local
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 15m
+              memory: 18Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cluster-observer
+  namespace: food-delivery
+  labels:
+    app.kubernetes.io/name: cluster-observer
+    app.kubernetes.io/part-of: food-delivery
+spec:
+  selector:
+    app.kubernetes.io/name: cluster-observer
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

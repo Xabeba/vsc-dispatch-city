@@ -5,7 +5,8 @@ resources:
   - postgres.yaml
   - migrate-job.yaml
 patches:
-  - path: database-patch.yaml
+  - path: control-api-patch.yaml
+  - path: order-worker-patch.yaml
   - path: rabbitmq-probe-patch.yaml
 labels:
   - pairs:

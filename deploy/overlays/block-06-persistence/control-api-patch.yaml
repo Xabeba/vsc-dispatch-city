@@ -1,0 +1,17 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: control-api
+  namespace: food-delivery
+spec:
+  replicas: 2
+  template:
+    spec:
+      containers:
+        - name: control-api
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: database-url
+                  key: url
