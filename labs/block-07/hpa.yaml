@@ -9,7 +9,11 @@ spec:
     kind: Deployment
     name: lab-web
   minReplicas: 2
+<<<<<<< Updated upstream
   maxReplicas: 4
+=======
+  maxReplicas: 3
+>>>>>>> Stashed changes
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 60
